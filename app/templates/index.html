@@ -1,0 +1,961 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparador de precios</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --card: #fff; --text: #1b1f27; --muted: #5f6673; --line: #e3e6eb; --soft: #f0f2f5;
+    --accent: #2563eb; --accent-soft: #e8efff; --good: #15803d; --good-bg: #eaf7ef; --warn: #b45309; --warn-bg: #fff4e0;
+    --shadow: 0 1px 2px rgba(16,24,40,.05), 0 4px 14px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --card: #181b22; --text: #e8eaee; --muted: #9aa1ad; --line: #2a2e37; --soft: #20242c;
+            --accent: #60a5fa; --accent-soft: #1b2a44; --good: #4ade80; --good-bg: #12261a; --warn: #fbbf24; --warn-bg: #2b2210;
+            --shadow: 0 1px 2px rgba(0,0,0,.4); }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-padding-top: 72px; }
+  body { margin: 0; font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--text); }
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 10px; padding: 10px 16px; background: var(--accent); color: #fff; }
+  button:disabled { opacity: .6; cursor: wait; }
+  button.ghost { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+  a { color: var(--accent); }
+  .muted { color: var(--muted); }
+  .small { font-size: 13px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .off { color: var(--good); font-weight: 700; }
+  .err { color: #dc2626; font-size: 14px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 16px; }
+
+  /* ---------- Encabezado y pestañas ---------- */
+  header.top { position: sticky; top: 0; z-index: 20; background: var(--card); border-bottom: 1px solid var(--line); }
+  header.top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 60px; }
+  .brand { font-weight: 800; font-size: 18px; white-space: nowrap; }
+  .brand span { color: var(--muted); font-weight: 500; font-size: 14px; }
+  nav.tabs { display: flex; gap: 4px; }
+  nav.tabs a { text-decoration: none; color: var(--muted); padding: 8px 14px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+  nav.tabs a.active { background: var(--accent-soft); color: var(--accent); }
+  .badge { display: inline-block; min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: #fff;
+           font-size: 12px; line-height: 20px; text-align: center; margin-left: 4px; }
+  .badge[hidden] { display: none; }
+  @media (max-width: 640px) { .brand span { display: none; } nav.tabs a { padding: 8px 10px; } .tab-label { display: none; } }
+
+  main { padding: 24px 0 120px; }
+  .view[hidden] { display: none; }
+
+  /* ---------- Buscador ---------- */
+  .hero { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+  .hero h1 { margin: 0 0 4px; font-size: 22px; }
+  .hero p { margin: 0 0 14px; }
+  form.search { display: flex; gap: 8px; }
+  form.search input { flex: 1; min-width: 0; padding: 14px 16px; font-size: 17px; border-radius: 12px;
+                      border: 2px solid var(--line); background: var(--bg); color: var(--text); }
+  form.search input:focus { outline: none; border-color: var(--accent); }
+  form.search button { padding: 14px 22px; font-size: 17px; font-weight: 600; }
+  .chiprow { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+  .chiprow:empty { display: none; }
+  .chiprow .lbl { font-size: 13px; color: var(--muted); margin-right: 2px; }
+  .chip { font-size: 14px; padding: 5px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  .results-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .loading { text-align: center; padding: 40px 0; color: var(--muted); }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--line); border-top-color: var(--accent); border-radius: 50%;
+             animation: spin 1s linear infinite; margin: 0 auto 10px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ---------- Tarjeta por búsqueda ---------- */
+  .qcard { background: var(--card); border-radius: 16px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 24px; }
+  .qhead { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+  .qhead h2 { margin: 0; font-size: 22px; text-transform: capitalize; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .pill { padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--soft); color: var(--text); font-size: 14px; }
+  .pill.on { background: var(--text); color: var(--card); border-color: var(--text); font-weight: 600; }
+  .pill .n { opacity: .65; margin-left: 6px; }
+
+  .winner { display: flex; gap: 16px; align-items: center; background: var(--good-bg); border-radius: 14px; padding: 14px 16px; margin-bottom: 12px; }
+  .winner img { width: 72px; height: 72px; object-fit: contain; background: #fff; border-radius: 10px; flex: none; }
+  .winner .label { color: var(--good); font-weight: 800; font-size: 13px; letter-spacing: .03em; text-transform: uppercase; }
+  .winner .name { font-weight: 600; margin: 2px 0 4px; }
+  .winner .price { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .winner .grow { flex: 1; min-width: 0; }
+  .winner .acts { display: flex; flex-direction: column; gap: 6px; align-items: stretch; text-align: center; }
+  @media (max-width: 640px) { .winner { flex-wrap: wrap; } .winner .acts { flex-direction: row; width: 100%; } .winner .acts > * { flex: 1; } }
+
+  .compare3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+  @media (max-width: 640px) { .compare3 { grid-template-columns: 1fr; } }
+  .scard { border: 1px solid var(--line); border-top: 4px solid; border-radius: 12px; padding: 10px 12px; }
+  .scard .sname { font-weight: 700; display: flex; justify-content: space-between; gap: 6px; }
+  .scard .unit { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .scard .diff { font-size: 13px; font-weight: 700; color: var(--warn); }
+  .scard .diff.best { color: var(--good); }
+  .scard .pn { font-size: 13px; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding: 12px 0; border-top: 1px solid var(--line); }
+  .toolbar select, .toolbar input { font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+                                     background: var(--card); color: var(--text); }
+  .toolbar input { flex: 1; min-width: 180px; }
+  .storechip { font-size: 13px; padding: 5px 10px; border-radius: 999px; border: 2px solid; background: transparent; color: var(--text); font-weight: 600; }
+  .storechip.offc { opacity: .4; text-decoration: line-through; }
+
+  /* ---------- Fila de producto ---------- */
+  .plist { display: flex; flex-direction: column; }
+  .prow { display: grid; grid-template-columns: 52px 1fr 120px 110px auto; gap: 12px; align-items: center;
+          padding: 10px 8px; border-bottom: 1px solid var(--line); border-radius: 10px; }
+  .prow:hover { background: var(--soft); }
+  .prow.best { background: var(--good-bg); }
+  .prow img, .thumb { width: 52px; height: 52px; object-fit: contain; background: #fff; border-radius: 8px; }
+  .pname { font-weight: 600; line-height: 1.3; }
+  .pmeta { font-size: 13px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 2px; }
+  .pprice .price { font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+  .pprice .old { font-size: 12px; color: var(--muted); }
+  .pprice .old s { margin-right: 4px; }
+  .punit { font-size: 14px; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+  .punit .lbl { display: block; font-size: 11px; color: var(--muted); font-weight: 500; }
+  .pact { display: flex; gap: 10px; align-items: center; justify-content: flex-end; }
+  .pact a { font-size: 14px; }
+  @media (max-width: 720px) {
+    .prow { grid-template-columns: 52px 1fr auto; grid-template-areas: "img main main" "img price unit" "act act act"; row-gap: 6px; }
+    .prow > img, .prow > .thumb { grid-area: img; align-self: start; }
+    .prow .pmain { grid-area: main; } .prow .pprice { grid-area: price; text-align: left; } .prow .punit { grid-area: unit; } .prow .pact { grid-area: act; }
+  }
+  .tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 6px; color: #111; white-space: nowrap; }
+  .disc { display: inline-block; font-size: 12px; font-weight: 800; color: #fff; background: #16a34a; border-radius: 6px; padding: 0 6px; }
+  .add { padding: 8px 14px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+  .add.in { background: var(--good); }
+  .more { display: block; margin: 12px auto 0; }
+  .empty { text-align: center; padding: 24px; color: var(--muted); }
+
+  /* ---------- Carrito ---------- */
+  .cart-layout { display: grid; grid-template-columns: 1fr 340px; gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .cart-layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--card); border-radius: 16px; padding: 18px; box-shadow: var(--shadow); }
+  .side { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 14px; }
+  @media (max-width: 900px) { .side { position: static; } }
+  .viewhead { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .viewhead h1 { margin: 0; font-size: 24px; }
+  .store-block { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+  .store-block > h3 { margin: 0; padding: 12px 18px; display: flex; justify-content: space-between; font-size: 17px; border-left: 6px solid; }
+  .citem { display: grid; grid-template-columns: 52px 1fr auto auto auto; gap: 8px 12px; align-items: center; padding: 10px 18px; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) {
+    .citem { grid-template-columns: 52px 1fr auto; grid-template-areas: "img main rm" "img qty total" "tip tip tip"; }
+    .citem > .thumb { grid-area: img; } .citem .cmain { grid-area: main; } .citem .qty { grid-area: qty; justify-self: start; }
+    .citem .ctotal { grid-area: total; } .citem .rm { grid-area: rm; } .citem .tip { grid-area: tip; }
+  }
+  .qty { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .qty button { background: var(--soft); color: var(--text); border-radius: 0; padding: 6px 12px; font-weight: 700; }
+  .qty span { min-width: 32px; text-align: center; font-weight: 700; }
+  .rm { background: none; color: var(--muted); padding: 6px 8px; font-size: 18px; }
+  .rm:hover { color: #dc2626; }
+  .ctotal { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
+  .tip { grid-column: 2 / -1; font-size: 14px; background: var(--warn-bg); border-radius: 10px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .tip button { padding: 4px 12px; font-size: 13px; }
+  .store-foot { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 18px; background: var(--soft); }
+  .go { display: inline-block; padding: 9px 16px; border-radius: 10px; color: #111; text-decoration: none; font-weight: 700; font-size: 14px; }
+  .kpi { padding: 12px 14px; border-radius: 12px; background: var(--soft); }
+  .kpi .k { font-size: 13px; color: var(--muted); }
+  .kpi .v { font-size: 22px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .kpi.main { background: var(--good-bg); }
+  .kpi.main .v { color: var(--good); font-size: 28px; }
+  .kpi.warn { background: var(--warn-bg); }
+  .kpi.warn .v { color: var(--warn); }
+  .kpis { display: grid; gap: 10px; }
+  .kpis.row { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .total-line { display: flex; justify-content: space-between; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .empty-state { text-align: center; padding: 60px 20px; }
+  .empty-state .big { font-size: 48px; }
+
+  /* ---------- Listas ---------- */
+  .lists-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .lcard { background: var(--card); border-radius: 16px; padding: 16px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+  .lcard .lname { font: inherit; font-size: 17px; font-weight: 700; border: 1px solid transparent; border-radius: 8px; padding: 2px 6px;
+                  margin-left: -6px; background: transparent; color: var(--text); width: 100%; }
+  .lcard .lname:hover, .lcard .lname:focus { border-color: var(--line); outline: none; background: var(--bg); }
+  .litems { display: flex; flex-wrap: wrap; gap: 6px; }
+  .litem { font-size: 13px; background: var(--soft); border-radius: 8px; padding: 3px 4px 3px 8px; display: inline-flex; gap: 4px; align-items: center; }
+  .litem button { background: none; color: var(--muted); padding: 0 4px; font-size: 13px; }
+  .litem button:hover { color: #dc2626; }
+  .lacts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; }
+  .lacts button { padding: 8px 12px; font-size: 14px; }
+  h2.section { font-size: 18px; margin: 0 0 12px; }
+  .save-row { display: flex; gap: 8px; margin-top: 12px; }
+  .save-row input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line);
+                    background: var(--bg); color: var(--text); }
+  .save-row button { padding: 8px 12px; font-size: 14px; white-space: nowrap; }
+  .banner { background: var(--accent-soft); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; display: flex; gap: 8px 16px; flex-wrap: wrap; align-items: center; }
+
+  /* ---------- Resumen ---------- */
+  .rcpt { max-width: 860px; margin: 0 auto; }
+  .rcpt .store-block table td, .rcpt .store-block table th { padding: 8px 18px; }
+  .rcpt .tip { display: block; margin-top: 6px; }
+
+  /* ---------- Barra inferior y aviso ---------- */
+  #cartbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; background: var(--card); border-top: 1px solid var(--line);
+             box-shadow: 0 -4px 16px rgba(0,0,0,.08); }
+  #cartbar[hidden], #toast[hidden] { display: none; }
+  #cartbar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; padding-top: 10px; padding-bottom: 10px; }
+  #cartbar .info { display: flex; gap: 4px 16px; flex-wrap: wrap; align-items: baseline; font-variant-numeric: tabular-nums; }
+  #toast { position: fixed; left: 50%; bottom: 84px; transform: translateX(-50%); z-index: 30; background: var(--text); color: var(--card);
+           padding: 10px 16px; border-radius: 12px; display: flex; gap: 12px; align-items: center; box-shadow: var(--shadow); max-width: calc(100% - 32px); }
+  #toast button { padding: 4px 10px; font-size: 14px; }
+
+  @media print {
+    header.top, #cartbar, #toast, .noprint { display: none !important; }
+    body { background: #fff; color: #000; }
+    .store-block, .panel { box-shadow: none; border: 1px solid #ddd; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <div class="brand">🛒 Comparador <span>Olímpica · Éxito · Jumbo</span></div>
+    <nav class="tabs">
+      <a href="#buscar" data-view="buscar">🔎 <span class="tab-label">Buscar</span></a>
+      <a href="#carrito" data-view="carrito">🛒 <span class="tab-label">Carrito</span><span class="badge" id="badge" hidden></span></a>
+      <a href="#resumen" data-view="resumen">📋 <span class="tab-label">Resumen</span></a>
+      <a href="#listas" data-view="listas">📝 <span class="tab-label">Mis listas</span></a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <!-- ===== Buscar ===== -->
+  <div class="view" id="view-buscar">
+    <section class="hero">
+      <h1>¿Qué quieres comparar?</h1>
+      <p class="muted">Escribe uno o varios productos separados por coma. Comparamos por precio por kg, litro o unidad.</p>
+      <form class="search" id="f">
+        <input id="q" placeholder="Ej: fab, limpido, jabon corporal, pasta dental" autocomplete="off" autofocus>
+        <button id="btn">Buscar</button>
+      </form>
+      <div class="chiprow">
+        <span class="lbl">Ejemplos:</span>
+        {% for ex in ["detergente fab", "limpido", "jabon corporal", "pasta dental", "head & shoulders"] %}
+        <button class="chip" type="button" data-q="{{ ex }}">{{ ex }}</button>
+        {% endfor %}
+      </div>
+      <div class="chiprow" id="mylists"></div>
+      <div class="chiprow" id="recent"></div>
+    </section>
+    <div id="results-bar"></div>
+    <div id="results"></div>
+  </div>
+
+  <!-- ===== Carrito ===== -->
+  <div class="view" id="view-carrito" hidden></div>
+
+  <!-- ===== Resumen ===== -->
+  <div class="view" id="view-resumen" hidden></div>
+
+  <!-- ===== Mis listas ===== -->
+  <div class="view" id="view-listas" hidden></div>
+</main>
+
+<div id="cartbar" hidden></div>
+<div id="toast" hidden></div>
+
+<script>
+const STORES = {{ stores | map(attribute='__dict__') | list | tojson }};
+const storeOf = k => STORES.find(s => s.key === k) || {color: '#999', name: k};
+const money = n => n == null ? '—' : '$' + Math.round(n).toLocaleString('es-CO');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const tag = o => `<span class="tag" style="background:${storeOf(o.store).color}">${esc(o.store_name || storeOf(o.store).name)}</span>`;
+const unitName = u => u === 'und' ? 'unidad' : u;
+const perUnit = o => o.unit_price != null ? `${money(o.unit_price)}/${o.unit_price_label}` : '—';
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const offerId = o => `${o.store}:${o.sku_id}:${o.seller_id}`;
+// seller_id "1" es la propia tienda en VTEX (Jumbo aparece como "Cencosud - Colombia").
+const sellerLabel = o => o.seller && o.seller_id !== '1' && !/^(olimpica|exito|jumbo|cencosud)/i.test(o.seller)
+  ? `<span>Vende: ${esc(o.seller)}</span>` : '';
+// localStorage solo como comodidad: si falla, la página funciona igual.
+const storage = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+
+// ================= Estado =================
+let results = [];          // respuesta de /api/search
+let ui = [];               // por búsqueda: {g, sort, stores:Set, text, limit}
+const OFFERS = {};         // id -> {offer, query, type, alts} para los botones "Agregar"
+let cart = new Map(storage.get('cart', []));   // id -> {offer, query, type, alts, qty}; alts = mejor opción por tienda
+let recent = storage.get('recent', []);
+const PAGE = 12;
+
+// ================= Navegación por pestañas =================
+const VIEWS = ['buscar', 'carrito', 'resumen', 'listas'];
+function currentView() { const v = (location.hash || '#buscar').slice(1); return VIEWS.includes(v) ? v : 'buscar'; }
+function showView() {
+  const v = currentView();
+  for (const id of VIEWS) document.getElementById('view-' + id).hidden = id !== v;
+  document.querySelectorAll('nav.tabs a').forEach(a => a.classList.toggle('active', a.dataset.view === v));
+  if (v === 'carrito') renderCartView();
+  if (v === 'resumen') renderSummaryView();
+  if (v === 'listas') renderListsView();
+  renderCartBar();
+  window.scrollTo({top: 0});
+}
+window.addEventListener('hashchange', showView);
+
+// ================= Búsqueda =================
+function renderRecent() {
+  document.getElementById('recent').innerHTML = recent.length ? `<span class="lbl">Recientes:</span>` +
+    recent.map(q => `<button class="chip" type="button" data-q="${esc(q)}">${esc(q)}</button>`).join('') +
+    `<button class="chip" type="button" data-clear-recent="1" title="Borrar recientes">✕ borrar</button>` : '';
+}
+
+async function run(q) {
+  q = q.trim();
+  if (!q) return;
+  document.getElementById('q').value = q;
+  recent = [q, ...recent.filter(r => r !== q)].slice(0, 8);
+  storage.set('recent', recent); renderRecent();
+  if (currentView() !== 'buscar') location.hash = '#buscar';
+  const out = document.getElementById('results'), btn = document.getElementById('btn');
+  btn.disabled = true;
+  document.getElementById('results-bar').innerHTML = '';
+  out.innerHTML = `<div class="loading"><div class="spinner"></div>Buscando en Olímpica, Éxito y Jumbo…</div>`;
+  try {
+    const res = await fetch('/api/search?q=' + encodeURIComponent(q));
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    results = (await res.json()).results;
+    ui = results.map(() => ({g: 0, sort: 'unit', stores: new Set(STORES.map(s => s.key)), text: '', limit: PAGE}));
+    renderResults();
+  } catch (e) {
+    out.innerHTML = `<div class="qcard err">No se pudo buscar: ${esc(e.message)}</div>`;
+  } finally { btn.disabled = false; }
+}
+
+function renderResults() {
+  const any = results.some(r => r.groups.length);
+  document.getElementById('results-bar').innerHTML = results.length ? `<div class="results-bar">
+      <div class="chiprow" style="margin:0">${results.length > 1
+        ? `<span class="lbl">Ir a:</span>` + results.map((r, i) => `<button class="chip" type="button" data-jump="${i}">${esc(r.query)}</button>`).join('')
+        : ''}</div>
+      ${any ? `<button type="button" data-fill="1">🛒 Agregar las mejores ofertas al carrito</button>` : ''}
+    </div>` : '';
+  document.getElementById('results').innerHTML = results.map((r, i) => `<article class="qcard" id="q-${i}"></article>`).join('');
+  results.forEach((r, i) => renderQuery(i));
+}
+
+function renderQuery(i) {
+  const r = results[i], st = ui[i], el = document.getElementById('q-' + i);
+  const errors = Object.keys(r.errors).map(k =>
+    `<div class="err">⚠️ No se pudo consultar ${esc(storeOf(k).name)}. Intenta de nuevo en un momento.</div>`).join('');
+  if (!r.groups.length) {
+    el.innerHTML = `<div class="qhead"><h2>${esc(r.query)}</h2></div>
+      <div class="empty">No encontramos productos para “${esc(r.query)}”. Prueba con otra palabra o con la marca.</div>${errors}`;
+    return;
+  }
+  const g = r.groups[st.g];
+  const pills = r.groups.length > 1 ? `<div class="pills">${r.groups.map((x, gi) =>
+    `<button class="pill ${gi === st.g ? 'on' : ''}" type="button" data-pill="${i}|${gi}">${esc(x.type)}<span class="n">${x.offers.length}</span></button>`).join('')}</div>` : '';
+  el.innerHTML = `
+    <div class="qhead"><h2>${esc(r.query)}</h2>
+      <span class="muted small">${plural(r.total, 'producto')} · ${plural(r.groups.length, 'tipo')}</span></div>
+    ${pills}
+    ${winnerHtml(g, r.query)}
+    ${compare3Html(g)}
+    <div class="toolbar">
+      <select data-sort="${i}" aria-label="Ordenar">
+        <option value="unit" ${st.sort === 'unit' ? 'selected' : ''}>Más barato por ${g.unit ? unitName(g.unit) : 'unidad'}</option>
+        <option value="price" ${st.sort === 'price' ? 'selected' : ''}>Precio más bajo</option>
+        <option value="discount" ${st.sort === 'discount' ? 'selected' : ''}>Mayor descuento</option>
+      </select>
+      ${STORES.map(s => `<button type="button" class="storechip ${st.stores.has(s.key) ? '' : 'offc'}" style="border-color:${s.color}"
+          data-storefilter="${i}|${s.key}" title="Mostrar u ocultar ${esc(s.name)}">${esc(s.name)}</button>`).join('')}
+      <input type="search" placeholder="Filtrar estos resultados (ej. color, 5kg)" value="${esc(st.text)}" data-filter="${i}">
+    </div>
+    <div id="list-${i}"></div>
+    ${errors}`;
+  renderList(i);
+}
+
+function winnerHtml(g, query) {
+  const b = g.best_offer;
+  return `<div class="winner">
+    ${b.image ? `<img src="${esc(b.image)}" alt="" loading="lazy">` : ''}
+    <div class="grow">
+      <div class="label">🏆 Mejor oferta${g.unit ? ` · más barato por ${unitName(g.unit)}` : ''}</div>
+      <div class="name">${esc(b.name)}</div>
+      <div>${tag(b)} <span class="price">${money(b.price)}</span>
+        <span class="muted">· ${perUnit(b)}</span> ${b.discount_pct ? `<span class="disc">-${b.discount_pct}%</span>` : ''}</div>
+    </div>
+    <div class="acts">
+      ${b.sku_id ? addBtn(b, query, g, 'Agregar al carrito') : ''}
+      <a href="${esc(b.link)}" target="_blank" rel="noopener" class="small">Ver en ${esc(b.store_name)} ↗</a>
+    </div>
+  </div>`;
+}
+
+function compare3Html(g) {
+  const best = g.best_offer;
+  return `<div class="compare3">${STORES.map(s => {
+    const o = g.best_by_store[s.key];
+    if (!o) return `<div class="scard" style="border-top-color:${s.color}"><div class="sname">${esc(s.name)}</div>
+      <div class="muted small">No tiene este tipo de producto</div></div>`;
+    const comparable = o.unit_price != null && best.unit_price != null && o.unit_price_label === best.unit_price_label;
+    const pct = comparable && best.unit_price > 0 ? Math.round((o.unit_price / best.unit_price - 1) * 100) : null;
+    const isBest = o.store === best.store;
+    return `<div class="scard" style="border-top-color:${s.color}">
+      <div class="sname"><span>${esc(s.name)}</span>
+        <span class="diff ${isBest ? 'best' : ''}">${isBest ? '🏆 Más barato' : pct != null ? `+${pct}% más caro` : ''}</span></div>
+      <div class="unit">${o.unit_price != null ? perUnit(o) : money(o.price)}</div>
+      <div class="pn">${money(o.price)} · ${esc(o.name)}</div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function filteredOffers(i) {
+  const st = ui[i], g = results[i].groups[st.g];
+  const words = norm(st.text).split(/\s+/).filter(Boolean);
+  const list = g.offers.filter(o => {
+    if (!st.stores.has(o.store)) return false;
+    const hay = norm(`${o.name} ${o.brand} ${o.store_name} ${o.size_label || ''}`);
+    const compact = hay.replace(/\s+/g, '');   // "5kg" encuentra "5 kg"
+    return words.every(w => hay.includes(w) || compact.includes(w));
+  });
+  const byUnit = (a, b) => (a.unit_price == null) - (b.unit_price == null) || (a.unit_price || 0) - (b.unit_price || 0) || a.price - b.price;
+  const sorters = {unit: byUnit, price: (a, b) => a.price - b.price, discount: (a, b) => b.discount_pct - a.discount_pct || byUnit(a, b)};
+  return list.sort(sorters[st.sort]);
+}
+
+function renderList(i) {
+  const st = ui[i], r = results[i], g = r.groups[st.g];
+  const list = filteredOffers(i);
+  const el = document.getElementById('list-' + i);
+  if (!list.length) { el.innerHTML = `<div class="empty">Ningún producto coincide con los filtros.</div>`; return; }
+  el.innerHTML = `<div class="plist">${list.slice(0, st.limit).map(o => prowHtml(o, g, r.query)).join('')}</div>
+    ${list.length > st.limit ? `<button class="ghost more" type="button" data-more="${i}">Ver ${Math.min(PAGE, list.length - st.limit)} más (quedan ${list.length - st.limit})</button>` : ''}`;
+}
+
+function prowHtml(o, g, query) {
+  const isBest = offerId(o) === offerId(g.best_offer);
+  return `<div class="prow ${isBest ? 'best' : ''}">
+    ${o.image ? `<img src="${esc(o.image)}" alt="" loading="lazy">` : '<div class="thumb"></div>'}
+    <div class="pmain">
+      <div class="pname">${isBest ? '🏆 ' : ''}${esc(o.name)}</div>
+      <div class="pmeta">${tag(o)} <span>${o.size_label ? esc(o.size_label) : 'tamaño ?'}</span> ${sellerLabel(o)}</div>
+    </div>
+    <div class="pprice num">
+      <div class="price">${money(o.price)}</div>
+      ${o.discount_pct ? `<div class="old"><s>${money(o.list_price)}</s><span class="disc">-${o.discount_pct}%</span></div>` : ''}
+    </div>
+    <div class="punit">${perUnit(o)}<span class="lbl">${o.unit_price != null ? `por ${unitName(o.unit_price_label)}` : 'sin tamaño'}</span></div>
+    <div class="pact"><a href="${esc(o.link)}" target="_blank" rel="noopener">Ver ↗</a>${o.sku_id ? addBtn(o, query, g) : ''}</div>
+  </div>`;
+}
+
+function addBtn(o, query, g, label = '+ Agregar') {
+  const id = offerId(o);
+  OFFERS[id] = {offer: o, query, type: g.type, alts: g.best_by_store};
+  const inCart = cart.has(id);
+  return `<button type="button" class="add ${inCart ? 'in' : ''}" data-add="${esc(id)}" data-label="${esc(label)}">${inCart ? '✓ En carrito' : esc(label)}</button>`;
+}
+
+// ================= Carrito: cálculos =================
+function cartItems() { return [...cart.entries()].map(([id, i]) => ({id, ...i})); }
+
+function altsOf(i) {
+  if (i.alts) return i.alts;
+  // Carritos guardados antes de que existiera "alts": se buscan en los resultados actuales.
+  const r = results.find(r => r.query === i.query);
+  const g = r && r.groups.find(g => g.type === i.type);
+  return g ? g.best_by_store : null;
+}
+
+// Costo de la misma cantidad del ítem comprándolo con la opción `alt` (por su precio por unidad).
+function equivCost(i, alt) {
+  if (offerId(alt) === offerId(i.offer)) return i.offer.price * i.qty;
+  const sameUnit = i.offer.size_qty && alt.unit_price != null && alt.unit_price_label === i.offer.unit_price_label;
+  const perBase = i.offer.unit_price_label === 'und' ? 1 : 1000;
+  return (sameUnit ? alt.unit_price * i.offer.size_qty / perBase : alt.price) * i.qty;
+}
+
+// Ahorro de cada ítem frente a la tienda más cara / al promedio, y si hay una opción más barata.
+function savings(items) {
+  const rows = items.map(i => {
+    const paid = i.offer.price * i.qty;
+    const costs = Object.values(altsOf(i) || {}).map(alt => ({store: alt.store, store_name: alt.store_name, cost: equivCost(i, alt)}));
+    if (!costs.some(c => c.store === i.offer.store)) costs.push({store: i.offer.store, store_name: i.offer.store_name, cost: paid});
+    const worst = costs.reduce((a, b) => (b.cost > a.cost ? b : a));
+    const avg = costs.reduce((t, c) => t + c.cost, 0) / costs.length;
+    const discount = Math.max(0, (i.offer.list_price - i.offer.price) * i.qty);
+    const alts = Object.values(altsOf(i) || {}).filter(a => a.sku_id && offerId(a) !== offerId(i.offer));
+    const cheapest = alts.map(a => ({alt: a, cost: equivCost(i, a)})).sort((a, b) => a.cost - b.cost)[0];
+    const better = cheapest && paid - cheapest.cost >= Math.max(100, paid * 0.01) ? cheapest : null;
+    return {i, paid, worst, avg, vsWorst: Math.max(0, worst.cost - paid), vsAvg: avg - paid, discount, nStores: costs.length,
+            better, extra: better ? paid - better.cost : 0};
+  });
+  const sum = k => rows.reduce((t, r) => t + r[k], 0);
+  return {rows, paid: sum('paid'), worst: rows.reduce((t, r) => t + Math.max(r.worst.cost, r.paid), 0),
+          vsWorst: sum('vsWorst'), vsAvg: sum('vsAvg'), discount: sum('discount'), extra: sum('extra'),
+          units: items.reduce((t, i) => t + i.qty, 0)};
+}
+
+function singleStoreTotals(items) {
+  return STORES.map(s => {
+    let total = 0, missing = 0;
+    for (const i of items) {
+      const alt = (altsOf(i) || {})[s.key];
+      if (alt) total += equivCost(i, alt); else missing += 1;
+    }
+    return {store: s, total, missing};
+  });
+}
+
+// Cantidad del producto alternativo para cubrir lo mismo (ej. 2 × 2 kg → 1 × 5 kg).
+function swapQty(i, alt) {
+  if (!i.offer.size_qty || !alt.size_qty || alt.size_unit !== i.offer.size_unit) return i.qty;
+  return Math.max(1, Math.round(i.offer.size_qty * i.qty / alt.size_qty));
+}
+
+// Enlace estándar de VTEX que agrega los SKUs al carrito real de la tienda.
+function cartUrl(s, items) {
+  const params = items.map(i => `sku=${encodeURIComponent(i.offer.sku_id)}&qty=${i.qty}&seller=${encodeURIComponent(i.offer.seller_id)}`);
+  return `${s.base_url}${s.cart_path}?${params.join('&')}&sc=1`;
+}
+
+// ================= Carrito: acciones =================
+function cartChanged() {
+  storage.set('cart', [...cart]);
+  if (!cart.size) { storage.set('cartSession', null); repeatInfo = null; }
+  const v = currentView();
+  if (v === 'carrito') renderCartView();
+  if (v === 'resumen') renderSummaryView();
+  renderCartBar();
+  // Actualiza los botones "Agregar" visibles sin volver a pintar los resultados.
+  document.querySelectorAll('[data-add]').forEach(b => {
+    const inCart = cart.has(b.dataset.add);
+    b.classList.toggle('in', inCart);
+    b.textContent = inCart ? '✓ En carrito' : b.dataset.label;
+  });
+}
+
+function addToCart(id) {
+  const o = OFFERS[id];
+  if (!o) return;
+  const item = cart.get(id);
+  if (item) item.qty += 1; else cart.set(id, {...o, qty: 1});
+  cartChanged();
+  toast(`Agregado: ${o.offer.name}`, 'Ver carrito', () => (location.hash = '#carrito'));
+}
+
+function fillWithBest() {
+  let added = 0;
+  results.forEach((r, qi) => {
+    const g = r.groups[ui[qi].g];   // el tipo que estás viendo en cada búsqueda
+    if (!g || !g.best_offer.sku_id) return;
+    const id = offerId(g.best_offer);
+    if (!cart.has(id)) { cart.set(id, {offer: g.best_offer, query: r.query, type: g.type, alts: g.best_by_store, qty: 1}); added++; }
+  });
+  cartChanged();
+  toast(added ? `${plural(added, 'producto')} agregado${added === 1 ? '' : 's'} al carrito` : 'Ya estaban en el carrito',
+        'Ver carrito', () => (location.hash = '#carrito'));
+}
+
+function swapItem(id, storeKey) {
+  const i = cart.get(id);
+  const alt = i && (altsOf(i) || {})[storeKey];
+  if (!alt) return;
+  const newId = offerId(alt), qty = swapQty(i, alt);
+  cart.delete(id);
+  const existing = cart.get(newId);
+  if (existing) existing.qty += qty;
+  else cart.set(newId, {offer: alt, query: i.query, type: i.type, alts: i.alts || altsOf(i), qty});
+  cartChanged();
+  toast(`Cambiado a ${alt.store_name}`);
+}
+
+function clearCart() {
+  const backup = new Map(cart);
+  cart.clear(); cartChanged();
+  toast('Carrito vaciado', 'Deshacer', () => { cart = backup; cartChanged(); });
+}
+
+let toastTimer;
+function toast(msg, action, fn) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button" class="ghost">${esc(action)}</button>` : ''}`;
+  el.hidden = false;
+  if (action) el.querySelector('button').onclick = () => { el.hidden = true; fn(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (el.hidden = true), 4000);
+}
+
+// ================= Carrito: vistas =================
+function renderCartBar() {
+  const items = cartItems(), bar = document.getElementById('cartbar'), badge = document.getElementById('badge');
+  const s = savings(items);
+  badge.hidden = !items.length; badge.textContent = s.units;
+  // La barra solo aparece en Buscar; el carrito y el resumen tienen su propia pestaña.
+  if (!items.length || currentView() !== 'buscar') { bar.hidden = true; return; }
+  bar.hidden = false;
+  bar.innerHTML = `<div class="wrap">
+    <div class="info"><b>🛒 ${plural(s.units, 'producto')}</b><span>Total <b>${money(s.paid)}</b></span>
+      <span class="off">Ahorras ${money(s.vsWorst)}</span>
+      ${s.extra > 0 ? `<span style="color:var(--warn)">💡 Podrías ahorrar ${money(s.extra)} más</span>` : ''}</div>
+    <a href="#carrito"><button type="button">Ver carrito →</button></a>
+  </div>`;
+}
+
+function tipHtml(r) {
+  if (!r || !r.better) return '';
+  const a = r.better.alt, q = swapQty(r.i, a);
+  return `<div class="tip"><span>💡 En ${tag(a)} <b>${esc(a.name)}</b>${q > 1 ? ` ×${q}` : ''} sale a ${perUnit(a)} (el tuyo: ${perUnit(r.i.offer)}).
+    Ahorras ~<b>${money(r.extra)}</b> por la misma cantidad.</span>
+    <button type="button" data-swap="${esc(r.i.id)}" data-store="${esc(a.store)}">Cambiar</button></div>`;
+}
+
+function kpisHtml(s, layout = '') {
+  const pct = s.worst > 0 ? Math.round(s.vsWorst / s.worst * 100) : 0;
+  return `<div class="kpis ${layout}">
+    <div class="kpi main"><div class="k">Ahorras vs la tienda más cara</div><div class="v">${money(s.vsWorst)}</div>
+      <div class="k">${pct}% menos que ${money(s.worst)}</div></div>
+    ${s.vsAvg >= 0
+      ? `<div class="kpi"><div class="k">Ahorras vs el promedio de las tiendas</div><div class="v">${money(s.vsAvg)}</div></div>`
+      : `<div class="kpi warn"><div class="k">Pagas más que el promedio de las tiendas</div><div class="v">${money(-s.vsAvg)}</div></div>`}
+    <div class="kpi"><div class="k">Descuentos de las tiendas incluidos</div><div class="v">${money(s.discount)}</div></div>
+    ${s.extra > 0
+      ? `<div class="kpi warn"><div class="k">Podrías ahorrar además</div><div class="v">${money(s.extra)}</div>
+         <div class="k">cambiando ${plural(s.rows.filter(r => r.better).length, 'producto')} 💡</div></div>`
+      : `<div class="kpi"><div class="k">Podrías ahorrar además</div><div class="v" style="color:var(--good)">$0</div>
+         <div class="k">✓ Ya tienes las mejores opciones</div></div>`}
+  </div>`;
+}
+
+function emptyCartHtml() {
+  return `<div class="panel empty-state"><div class="big">🛒</div><h2>Tu carrito está vacío</h2>
+    <p class="muted">Busca productos y pulsa “+ Agregar”, o usa “Agregar las mejores ofertas al carrito”.</p>
+    <a href="#buscar"><button type="button">🔎 Ir a buscar</button></a></div>`;
+}
+
+function renderCartView() {
+  const el = document.getElementById('view-carrito'), items = cartItems();
+  if (!items.length) { el.innerHTML = emptyCartHtml(); return; }
+  const s = savings(items);
+  const rowOf = Object.fromEntries(s.rows.map(r => [r.i.id, r]));
+  const blocks = STORES.map(st => {
+    const its = items.filter(i => i.offer.store === st.key);
+    if (!its.length) return '';
+    const sub = its.reduce((t, i) => t + i.offer.price * i.qty, 0), n = its.reduce((t, i) => t + i.qty, 0);
+    return `<div class="store-block">
+      <h3 style="border-left-color:${st.color}"><span>${esc(st.name)} <span class="muted small">· ${plural(n, 'producto')}</span></span><span>${money(sub)}</span></h3>
+      ${its.map(i => `<div class="citem">
+        ${i.offer.image ? `<img class="thumb" src="${esc(i.offer.image)}" alt="" loading="lazy">` : '<div class="thumb"></div>'}
+        <div class="cmain"><div class="pname">${esc(i.offer.name)}</div>
+          <div class="pmeta"><span>${esc(i.type)}</span><span>·</span><span>${money(i.offer.price)} c/u</span><span>·</span><span>${perUnit(i.offer)}</span></div></div>
+        <div class="qty"><button type="button" data-dec="${esc(i.id)}" aria-label="Menos">−</button><span>${i.qty}</span><button type="button" data-inc="${esc(i.id)}" aria-label="Más">+</button></div>
+        <div class="ctotal">${money(i.offer.price * i.qty)}</div>
+        <button type="button" class="rm" data-rm="${esc(i.id)}" title="Quitar">✕</button>
+        ${tipHtml(rowOf[i.id])}
+      </div>`).join('')}
+      <div class="store-foot"><span class="muted small">Abre ${esc(st.name)} con estos productos ya en su carrito.</span>
+        <a class="go" style="background:${st.color}" href="${esc(cartUrl(st, its))}" target="_blank" rel="noopener">Pasar al carrito de ${esc(st.name)} →</a></div>
+    </div>`;
+  }).join('');
+
+  const singles = items.every(i => altsOf(i)) ? singleStoreTotals(items) : [];
+  const compare = singles.length ? `<div class="panel"><b>¿Y si compro todo en una sola tienda?</b>
+    <table style="margin-top:8px"><tbody>
+      <tr><td>Tu carrito</td><td class="num"><b>${money(s.paid)}</b></td></tr>
+      ${singles.map(x => `<tr><td>Todo en ${tag({store: x.store.key, store_name: x.store.name})}</td><td class="num">${
+        x.missing ? `<span class="muted">le faltan ${x.missing}</span>`
+                  : `${money(x.total)}<div class="small ${x.total < s.paid ? 'off' : 'muted'}">${x.total >= s.paid ? '+' : '−'}${money(Math.abs(x.total - s.paid))}</div>`}</td></tr>`).join('')}
+    </tbody></table>
+    <p class="muted small" style="margin:8px 0 0">Misma cantidad, con el mejor precio por unidad de cada tienda. No incluye domicilios.</p></div>` : '';
+
+  el.innerHTML = `${repeatBanner(s)}<div class="viewhead"><h1>🛒 Tu carrito</h1>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a href="#buscar"><button type="button" class="ghost">← Seguir buscando</button></a>
+        <button type="button" class="ghost" data-clear="1">Vaciar carrito</button></div></div>
+    <div class="cart-layout">
+      <div>${blocks}</div>
+      <aside class="side">
+        <div class="panel"><div class="total-line"><span>Total</span><span>${money(s.paid)}</span></div>
+          <div class="muted small" style="margin-bottom:12px">${plural(s.units, 'producto')} en ${plural(new Set(items.map(i => i.offer.store)).size, 'tienda')}</div>
+          ${kpisHtml(s)}
+          <a href="#resumen"><button type="button" style="width:100%;margin-top:12px">📋 Ver resumen</button></a></div>
+        <div class="panel"><b>💾 Guardar como lista</b>
+          <div class="muted small">Para repetir esta compra otro día con los precios de ese momento.</div>
+          <div class="save-row"><input id="listname" placeholder="Ej: Mercado del mes" maxlength="120" value="${esc(listNameDraft ?? (repeatInfo && repeatInfo.kind === 'lista' ? repeatInfo.name : ''))}">
+            <button type="button" data-savelist="1">Guardar</button></div></div>
+        ${compare}
+      </aside>
+    </div>`;
+}
+
+function summaryText(s) {
+  const lines = [`Resumen de compra — ${new Date().toLocaleDateString('es-CO')}`, ''];
+  for (const st of STORES) {
+    const rows = s.rows.filter(r => r.i.offer.store === st.key);
+    if (!rows.length) continue;
+    lines.push(`${st.name}: ${money(rows.reduce((t, r) => t + r.paid, 0))}`);
+    for (const r of rows) lines.push(`  - ${r.i.qty} × ${r.i.offer.name}: ${money(r.paid)}${r.vsWorst > 0 ? ` (ahorro ${money(r.vsWorst)})` : ''}`);
+    lines.push(`  Carrito: ${cartUrl(st, rows.map(r => r.i))}`, '');
+  }
+  lines.push(`Total: ${money(s.paid)}`, `Ahorro vs tienda más cara: ${money(s.vsWorst)}`, `Descuentos incluidos: ${money(s.discount)}`);
+  if (s.extra > 0) lines.push(`Podrías ahorrar además: ${money(s.extra)}`);
+  return lines.join('\n');
+}
+
+function renderSummaryView() {
+  const el = document.getElementById('view-resumen'), items = cartItems();
+  if (!items.length) { el.innerHTML = emptyCartHtml(); return; }
+  const s = savings(items);
+  const blocks = STORES.map(st => {
+    const rows = s.rows.filter(r => r.i.offer.store === st.key);
+    if (!rows.length) return '';
+    const sub = rows.reduce((t, r) => t + r.paid, 0), saved = rows.reduce((t, r) => t + r.vsWorst, 0);
+    return `<div class="store-block">
+      <h3 style="border-left-color:${st.color}"><span>${esc(st.name)}</span><span>${money(sub)}</span></h3>
+      <table><thead><tr><th>Producto</th><th class="num">Cant.</th><th class="num">Precio</th><th class="num">Pagas</th><th class="num">Ahorro</th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td><b>${esc(r.i.offer.name)}</b><div class="muted small">${esc(r.i.type)} · ${perUnit(r.i.offer)}${
+          r.nStores > 1 ? ` · más caro: ${money(r.worst.cost)} en ${esc(r.worst.store_name)}` : ' · solo en 1 tienda'}</div>
+          <div class="noprint">${tipHtml(r)}</div></td>
+        <td class="num">${r.i.qty}</td><td class="num">${money(r.i.offer.price)}</td><td class="num"><b>${money(r.paid)}</b></td>
+        <td class="num off">${r.vsWorst > 0 ? money(r.vsWorst) : '—'}</td></tr>`).join('')}
+      </tbody></table>
+      <div class="store-foot"><span>Ahorro en ${esc(st.name)}: <b class="off">${money(saved)}</b></span>
+        <a class="go noprint" style="background:${st.color}" href="${esc(cartUrl(st, rows.map(r => r.i)))}" target="_blank" rel="noopener">Pasar al carrito de ${esc(st.name)} →</a></div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="rcpt">
+    <div class="viewhead"><div><h1>📋 Resumen de tu compra</h1>
+        <div class="muted">${new Date().toLocaleDateString('es-CO', {dateStyle: 'long'})} · ${plural(s.units, 'producto')}</div></div>
+      <div class="noprint" style="display:flex;gap:8px;flex-wrap:wrap">
+        <button type="button" class="ghost" data-copy="1">Copiar</button>
+        <button type="button" class="ghost" data-print="1">Imprimir</button>
+        <a href="#carrito"><button type="button">Editar carrito</button></a></div></div>
+    <div class="panel" style="margin-bottom:16px">
+      <div class="total-line" style="font-size:24px;margin-bottom:12px"><span>Total a pagar</span><span>${money(s.paid)}</span></div>
+      ${kpisHtml(s, 'row')}
+    </div>
+    ${blocks}
+    <p class="muted small">El ahorro compara la misma cantidad (kg, litros o unidades) contra la tienda más cara que tiene ese tipo de producto. No incluye domicilios ni mínimos de compra. Los precios pueden variar según tu ciudad.</p>
+  </div>`;
+}
+
+// ================= Mis listas =================
+let savedLists = [];
+let listNameDraft = null;   // lo escrito en "Guardar como lista", para no perderlo al redibujar el carrito
+let repeatInfo = storage.get('repeatInfo', null);   // {id, name, kind, prevTotal, missing:[]} de la lista repetida
+
+const api = {
+  async list() { const r = await fetch('/api/lists'); if (!r.ok) throw new Error('HTTP ' + r.status); return (await r.json()).lists; },
+  async put(l) {
+    const r = await fetch('/api/lists/' + encodeURIComponent(l.id), {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(l)});
+    if (!r.ok) throw new Error('HTTP ' + r.status); return r.json();
+  },
+  async del(id) { const r = await fetch('/api/lists/' + encodeURIComponent(id), {method: 'DELETE'}); if (!r.ok) throw new Error('HTTP ' + r.status); },
+};
+const newId = p => `${p}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+const fmtDate = iso => iso ? new Date(iso).toLocaleDateString('es-CO', {day: 'numeric', month: 'short', year: 'numeric'}) : '';
+
+async function refreshLists() {
+  try { savedLists = await api.list(); } catch (e) { savedLists = []; }
+  renderMyListsChips();
+  if (currentView() === 'listas') renderListsView();
+}
+
+function listFromCart(id, name, kind) {
+  const items = cartItems(), s = savings(items);
+  return {id, name, kind, total: s.paid, savings: s.vsWorst,
+    items: items.map(i => ({query: i.query, type: i.type, qty: i.qty, name: i.offer.name, store: i.offer.store, price: i.offer.price,
+      size_qty: i.offer.size_qty, size_unit: i.offer.size_unit, unit_price: i.offer.unit_price, unit_price_label: i.offer.unit_price_label}))};
+}
+
+async function saveListFromCart() {
+  const name = (document.getElementById('listname').value || '').trim() || `Lista del ${fmtDate(new Date().toISOString())}`;
+  // Si ya existe una lista con ese nombre, se actualiza en vez de duplicarla.
+  const same = savedLists.find(l => l.kind === 'lista' && norm(l.name) === norm(name));
+  try {
+    await api.put(listFromCart(same ? same.id : newId('lista'), name, 'lista'));
+    toast(same ? `Lista “${name}” actualizada` : `Lista “${name}” guardada`, 'Ver listas', () => (location.hash = '#listas'));
+    listNameDraft = null;
+    refreshLists();
+  } catch (e) { toast('No se pudo guardar la lista'); }
+}
+
+// Al pasar el carrito a una tienda se guarda como "compra" (una por carrito, se actualiza si cambias algo).
+async function savePurchase() {
+  if (!cart.size) return;
+  let session = storage.get('cartSession', null);
+  if (!session) { session = newId('compra'); storage.set('cartSession', session); }
+  try { await api.put(listFromCart(session, `Compra del ${fmtDate(new Date().toISOString())}`, 'compra')); refreshLists(); } catch (e) {}
+}
+
+async function rebuy(id) {
+  const l = savedLists.find(x => x.id === id);
+  if (!l) return;
+  const queries = [...new Set(l.items.map(i => i.query))];
+  await run(queries.join(', '));
+  if (!results.length) return;
+  const backup = new Map(cart);
+  cart.clear();
+  const missing = [];
+  for (const it of l.items) {
+    const qi = results.findIndex(r => norm(r.query) === norm(it.query));
+    const r = results[qi];
+    if (!r || !r.groups.length) { missing.push(it.query); continue; }
+    const gi = Math.max(0, r.groups.findIndex(g => g.type === it.type));
+    const g = r.groups[gi];
+    ui[qi].g = gi;
+    const best = g.best_offer;
+    if (!best.sku_id) { missing.push(it.query); continue; }
+    // Misma cantidad que la vez pasada (ej. 2 × 2 kg → 1 × 5 kg si hoy lo mejor es el de 5 kg).
+    const amount = it.size_qty ? it.size_qty * it.qty : null;
+    const qty = amount && best.size_qty && best.size_unit === it.size_unit ? Math.max(1, Math.round(amount / best.size_qty)) : it.qty;
+    const cid = offerId(best), prev = cart.get(cid);
+    if (prev) prev.qty += qty; else cart.set(cid, {offer: best, query: r.query, type: g.type, alts: g.best_by_store, qty});
+  }
+  results.forEach((r, i) => renderQuery(i));   // las tarjetas muestran el tipo de la lista
+  storage.set('cartSession', null);
+  repeatInfo = {id: l.id, name: l.name, kind: l.kind, prevTotal: l.total, prevDate: l.updated_at, missing};
+  storage.set('repeatInfo', repeatInfo);
+  cartChanged();
+  location.hash = '#carrito';
+  if (backup.size) toast('Se reemplazó tu carrito anterior', 'Deshacer', () => { cart = backup; repeatInfo = null; storage.set('repeatInfo', null); cartChanged(); });
+}
+
+function repeatBanner(s) {
+  if (!repeatInfo) return '';
+  const diff = s.paid - repeatInfo.prevTotal;
+  return `<div class="banner">🔄 <span>Armado desde <b>${esc(repeatInfo.name)}</b> con la mejor oferta de hoy.</span>
+    <span>La vez pasada (${esc(fmtDate(repeatInfo.prevDate))}): <b>${money(repeatInfo.prevTotal)}</b> · Hoy: <b>${money(s.paid)}</b>
+      <b class="${diff <= 0 ? 'off' : ''}" style="${diff > 0 ? 'color:var(--warn)' : ''}">(${Math.round(diff) === 0 ? 'igual' : (diff < 0 ? '−' : '+') + money(Math.abs(diff))})</b></span>
+    ${repeatInfo.missing && repeatInfo.missing.length ? `<span class="err">No se encontró hoy: ${esc(repeatInfo.missing.join(', '))}</span>` : ''}
+    <span class="muted small">Si cambió el tamaño del mejor producto, se ajustó la cantidad para llevar lo mismo.</span></div>`;
+}
+
+function renderMyListsChips() {
+  const el = document.getElementById('mylists');
+  const named = savedLists.filter(l => l.kind === 'lista').slice(0, 6);
+  el.innerHTML = named.length ? `<span class="lbl">Tus listas:</span>` +
+    named.map(l => `<button class="chip" type="button" data-rebuy="${esc(l.id)}" title="Buscar y armar carrito">🔄 ${esc(l.name)}</button>`).join('') +
+    `<a class="small" href="#listas" style="margin-left:4px">ver todas</a>` : '';
+}
+
+function listCard(l) {
+  return `<div class="lcard">
+    <div>${l.kind === 'lista'
+      ? `<input class="lname" value="${esc(l.name)}" data-rename="${esc(l.id)}" maxlength="120" title="Haz clic para cambiar el nombre">`
+      : `<div style="font-size:17px;font-weight:700">${esc(l.name)}</div>`}
+      <div class="muted small">${plural(l.items.length, 'producto')} · ${l.kind === 'lista' ? 'actualizada' : 'comprada'} el ${esc(fmtDate(l.updated_at))}</div></div>
+    <div class="litems">${l.items.map((it, idx) => `<span class="litem" title="${esc(it.name)} — ${esc(storeOf(it.store).name)} ${money(it.price)}">
+      <b>${it.qty}×</b> ${esc(it.query)} <span class="muted">· ${esc(it.type)}</span>
+      ${l.kind === 'lista' ? `<button type="button" data-rmitem="${esc(l.id)}|${idx}" title="Quitar de la lista">✕</button>` : ''}</span>`).join('')}</div>
+    <div class="small">La vez pasada: <b>${money(l.total)}</b>${l.savings > 0 ? ` · ahorraste <span class="off">${money(l.savings)}</span>` : ''}</div>
+    <div class="lacts">
+      <button type="button" data-rebuy="${esc(l.id)}">🔄 Buscar y armar carrito</button>
+      <button type="button" class="ghost" data-searchlist="${esc(l.id)}">🔎 Solo buscar</button>
+      ${l.kind === 'compra' ? `<button type="button" class="ghost" data-keep="${esc(l.id)}">💾 Guardar como lista</button>` : ''}
+      <button type="button" class="ghost" data-dellist="${esc(l.id)}" title="Eliminar">🗑</button>
+    </div>
+  </div>`;
+}
+
+function renderListsView() {
+  const el = document.getElementById('view-listas');
+  const named = savedLists.filter(l => l.kind === 'lista'), compras = savedLists.filter(l => l.kind === 'compra');
+  if (!savedLists.length) {
+    el.innerHTML = `<div class="panel empty-state"><div class="big">📝</div><h2>Aún no tienes listas</h2>
+      <p class="muted">Arma un carrito y pulsa “💾 Guardar como lista” en la pestaña Carrito.<br>
+      Además, cada vez que pases un carrito a una tienda, la compra se guarda sola aquí.</p>
+      <a href="#buscar"><button type="button">🔎 Ir a buscar</button></a></div>`;
+    return;
+  }
+  el.innerHTML = `<div class="viewhead"><h1>📝 Mis listas</h1>
+      <span class="muted small">Escoge una lista y la volvemos a buscar con los precios de hoy.</span></div>
+    ${named.length ? `<h2 class="section">Listas guardadas</h2><div class="lists-grid">${named.map(listCard).join('')}</div>` : ''}
+    ${compras.length ? `<h2 class="section">Compras anteriores <span class="muted small" style="font-weight:400">· se guardan solas al pasar el carrito a una tienda</span></h2>
+      <div class="lists-grid">${compras.map(listCard).join('')}</div>` : ''}`;
+}
+
+async function updateList(l, msg) {
+  try { await api.put(l); if (msg) toast(msg); } catch (e) { toast('No se pudo guardar el cambio'); }
+  refreshLists();
+}
+
+// ================= Eventos =================
+document.getElementById('f').addEventListener('submit', e => { e.preventDefault(); run(document.getElementById('q').value); });
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  const d = t.dataset;
+  if (d.q) run(d.q);
+  else if (d.clearRecent) { recent = []; storage.set('recent', recent); renderRecent(); }
+  else if (d.add) addToCart(d.add);
+  else if (d.fill) fillWithBest();
+  else if (d.jump) document.getElementById('q-' + d.jump).scrollIntoView({behavior: 'smooth'});
+  else if (d.pill) { const [i, gi] = d.pill.split('|').map(Number); Object.assign(ui[i], {g: gi, limit: PAGE, text: ''}); renderQuery(i); }
+  else if (d.storefilter) {
+    const [i, k] = d.storefilter.split('|'), set = ui[+i].stores;
+    set.has(k) ? set.delete(k) : set.add(k);
+    if (!set.size) STORES.forEach(s => set.add(s.key));   // nunca dejar todas apagadas
+    ui[+i].limit = PAGE; renderQuery(+i);
+  }
+  else if (d.more) { ui[+d.more].limit += PAGE; renderList(+d.more); }
+  else if (d.inc) { cart.get(d.inc).qty += 1; cartChanged(); }
+  else if (d.dec) { const i = cart.get(d.dec); if (--i.qty <= 0) cart.delete(d.dec); cartChanged(); }
+  else if (d.rm) {
+    const id = d.rm, backup = cart.get(id);
+    cart.delete(id); cartChanged();
+    toast('Producto quitado', 'Deshacer', () => { cart.set(id, backup); cartChanged(); });
+  }
+  else if (d.swap) swapItem(d.swap, d.store);
+  else if (d.clear) clearCart();
+  else if (d.copy) navigator.clipboard.writeText(summaryText(savings(cartItems())))
+    .then(() => toast('Resumen copiado. Pégalo en WhatsApp o en una nota.')).catch(() => toast('No se pudo copiar'));
+  else if (d.print) window.print();
+  else if (d.savelist) saveListFromCart();
+  else if (d.rebuy) rebuy(d.rebuy);
+  else if (d.searchlist) { const l = savedLists.find(x => x.id === d.searchlist); if (l) run([...new Set(l.items.map(i => i.query))].join(', ')); }
+  else if (d.keep) {
+    const l = savedLists.find(x => x.id === d.keep);
+    if (l) updateList({...l, id: newId('lista'), kind: 'lista', name: `Lista del ${fmtDate(l.updated_at)}`}, 'Guardada en “Listas guardadas”. Puedes cambiarle el nombre.');
+  }
+  else if (d.dellist) {
+    const l = savedLists.find(x => x.id === d.dellist);
+    if (!l) return;
+    api.del(l.id).then(() => { refreshLists(); toast(`“${l.name}” eliminada`, 'Deshacer', () => updateList(l)); })
+      .catch(() => toast('No se pudo eliminar'));
+  }
+  else if (d.rmitem) {
+    const [id, idx] = d.rmitem.split('|'), l = savedLists.find(x => x.id === id);
+    if (!l) return;
+    const items = l.items.filter((_, k) => k !== +idx);
+    if (!items.length) { t.closest('.lcard').querySelector('[data-dellist]').click(); return; }
+    updateList({...l, items, total: items.reduce((a, it) => a + it.price * it.qty, 0)});
+  }
+});
+// Al pasar el carrito a una tienda, se guarda la compra (el enlace se abre igual).
+document.addEventListener('click', e => { if (e.target.closest('a.go')) savePurchase(); });
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'listname') saveListFromCart(); });
+document.addEventListener('change', e => {
+  const d = e.target.dataset;
+  if (d.sort) { ui[+d.sort].sort = e.target.value; renderList(+d.sort); }
+});
+document.addEventListener('input', e => {
+  const d = e.target.dataset;
+  if (d.filter) { ui[+d.filter].text = e.target.value; ui[+d.filter].limit = PAGE; renderList(+d.filter); }
+  if (e.target.id === 'listname') listNameDraft = e.target.value;
+});
+document.addEventListener('change', e => {
+  const id = e.target.dataset.rename, l = id && savedLists.find(x => x.id === id);
+  const name = l && e.target.value.trim();
+  if (l && name && name !== l.name) updateList({...l, name}, 'Nombre actualizado');
+});
+
+renderRecent();
+showView();
+refreshLists();
+</script>
+</body>
+</html>
